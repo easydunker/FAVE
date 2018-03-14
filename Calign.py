@@ -16,7 +16,7 @@ import wave
 import codecs
 import io
 
-HOMEDIR = '/Users/hu/Downloads/Forced_Aligner_Mandarin'
+HOMEDIR = '.'
 MODEL_DIR = HOMEDIR + '/model'
 
 missing = io.open('MissingWords', 'w', encoding='utf8')
