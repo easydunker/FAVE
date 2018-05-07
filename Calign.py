@@ -296,16 +296,30 @@ def prep_wav(orig_wav, out_wav, sr_override, wave_start, wave_end):
 
     return SR
 
-def processOneSegment(lines, tmpbase, lineNumber, SR, dict, puncs):
+def processOneSegment(lines, tmpbase, lineNumber, SR, dict, puncs, pinyin):
     if len(lines[lineNumber].split("\t")) != 3:
         print "Bad transcription line: " + lines[lineNumber]
         return
     wavestart = lines[lineNumber].split("\t")[0]
     waveend = lines[lineNumber].split("\t")[1]
     line = lines[lineNumber].split("\t")[2]
-    print "processing: " + line
-    spacedLine = line.replace('', ' ')
+
+    include_pinyin = False
+    if pinyin:
+        include_pinyin = bool(pinyin)
+
     base = tmpbase + '-' + str(lineNumber)
+    if include_pinyin is True:
+        pinyinf = codecs.open(base + "-pinyin.txt", 'w', 'utf-8rm ')
+        print line
+        pinyinf.write("" + line)
+        pinyinf.close()
+        cmd = "adso -y -f " + base + "-pinyin.txt" + "|sed 's/[1-9]/& /g'"
+        ok = os.system(cmd)
+        if ok != 0:
+            print "Ignoring line as adso generates bad character with line: " + lines[lineNumber]
+            return
+    spacedLine = line.replace('', ' ')
     prep_wav(tmpbase + '.wav', base + '.wav', SR, wavestart, waveend)
 
     # prepare plpfile
@@ -428,8 +442,9 @@ if __name__ == '__main__':
     word_alignments = []
     i = 0
     while (i < len(lines)):
-        r = processOneSegment(lines, tmpbase, i, SR, dict, puncs)
-        word_alignments += r
+        r = processOneSegment(lines, tmpbase, i, SR, dict, puncs, include_pinyin)
+        if r is not None:
+            word_alignments += r
         i += 1
 
     writeTextGrid(outfile, word_alignments, include_pinyin, tmpbase)
