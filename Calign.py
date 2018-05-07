@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# encoding: utf-8
 
 """ Usage:
       Calign.py [options] wavfile trsfile output_file
@@ -6,7 +7,8 @@
           -r sampling_rate -- override which sampling rate model to use, either 8000 or 16000
           -a user_supplied_dictionary -- encoded in utf8, the dictionary will be combined with the dictionary in the model
           -d user_supplied_dictionary -- encoded in utf8, the dictionary will be used alone, NOT combined with the dictionary in the model
-          -p punctuations -- encoded in utf8, punctuations and other symbols in this file will be deleted in forced alignment, the default is to use "puncs" in the model 
+          -p punctuations -- encoded in utf8, punctuations and other symbols in this file will be deleted in forced alignment, the default is to use "puncs" in the model
+          -y include_pinyin
 """
 
 import os
@@ -15,6 +17,7 @@ import getopt
 import wave
 import codecs
 import io
+import subprocess
 
 HOMEDIR = '.'
 MODEL_DIR = HOMEDIR + '/model'
@@ -135,7 +138,7 @@ def readAlignedMLF(mlffile, SR, wave_start):
     return ret
 
 
-def writeTextGrid(outfile, word_alignments):
+def writeTextGrid(outfile, word_alignments, pinyin, tmpbase):
     # make the list of just phone alignments
     phons = []
     for wrd in word_alignments:
@@ -145,14 +148,33 @@ def writeTextGrid(outfile, word_alignments):
     # we're getting elements of the form:
     #   ["word label", ["phone1", start, end], ["phone2", start, end], ...]
     wrds = []
+    pinyinwrds = ""
     for wrd in word_alignments:
         # If no phones make up this word, then it was an optional word
         # like a pause that wasn't actually realized.
         if len(wrd) == 1:
             continue
         wrds.append([wrd[0], wrd[1][1], wrd[-1][2]])  # word label, first phone start time, last phone end time
+        if wrd[0] != "sp":
+            pinyinwrds += wrd[0]
 
-        # write the phone interval tier
+    include_pinyin = False
+    if pinyin:
+        include_pinyin = bool(pinyin)
+
+    if include_pinyin is True:
+        pinyinf = open(tmpbase + "-pinyin.txt", 'w')
+        pinyinf.write(pinyinwrds)
+        pinyinf.close()
+        cmd = "adso -y -f " + tmpbase + "-pinyin.txt" + "|sed 's/[1-9]/& /g' >" + tmpbase + "-pinyin.out"
+        os.system(cmd)
+        f = open(tmpbase + "-pinyin.out")
+        output = f.readline()
+        f.close()
+        pinyins = output.split()
+
+
+    # write the phone interval tier
     fw = open(outfile, 'w')
     fw.write('File type = "ooTextFile short"\n')
     fw.write('"TextGrid"\n')
@@ -160,7 +182,10 @@ def writeTextGrid(outfile, word_alignments):
     fw.write(str(phons[0][1]) + '\n')
     fw.write(str(phons[-1][2]) + '\n')
     fw.write('<exists>\n')
-    fw.write('2\n')
+    if include_pinyin is True:
+        fw.write('3\n')
+    else:
+        fw.write('2\n')
     fw.write('"IntervalTier"\n')
     fw.write('"phone"\n')
     fw.write(str(phons[0][1]) + '\n')
@@ -170,6 +195,30 @@ def writeTextGrid(outfile, word_alignments):
         fw.write(str(phons[k][1]) + '\n')
         fw.write(str(phons[k][2]) + '\n')
         fw.write('"' + phons[k][0] + '"' + '\n')
+
+    if include_pinyin is True:
+        # write the pinyin interval tier
+        fw.write('"IntervalTier"\n')
+        fw.write('"pinyin"\n')
+        fw.write(str(phons[0][1]) + '\n')
+        fw.write(str(phons[-1][-1]) + '\n')
+        fw.write(str(len(wrds)) + '\n')
+        idx_pinyin = 0
+        for k in range(len(wrds) - 1):
+            fw.write(str(wrds[k][1]) + '\n')
+            fw.write(str(wrds[k + 1][1]) + '\n')
+            if wrds[k][0] != "sp":
+                fw.write('"' + pinyins[idx_pinyin] + '"' + '\n')
+                idx_pinyin += 1
+            else:
+                fw.write('"' + wrds[k][0] + '"' + '\n')
+
+        fw.write(str(wrds[-1][1]) + '\n')
+        fw.write(str(phons[-1][2]) + '\n')
+        if wrds[-1][0] != "sp":
+            fw.write('"' + pinyins[idx_pinyin] + '"' + '\n')
+        else:
+            fw.write('"' + wrds[-1][0] + '"' + '\n')
 
     # write the word interval tier
     fw.write('"IntervalTier"\n')
@@ -185,6 +234,30 @@ def writeTextGrid(outfile, word_alignments):
     fw.write(str(wrds[-1][1]) + '\n')
     fw.write(str(phons[-1][2]) + '\n')
     fw.write('"' + wrds[-1][0] + '"' + '\n')
+
+    if include_pinyin is True:
+        # write the pinyin interval tier
+        fw.write('"IntervalTier"\n')
+        fw.write('"pinyin"\n')
+        fw.write(str(phons[0][1]) + '\n')
+        fw.write(str(phons[-1][-1]) + '\n')
+        fw.write(str(len(wrds)) + '\n')
+        idx_pinyin = 0
+        for k in range(len(wrds) - 1):
+            fw.write(str(wrds[k][1]) + '\n')
+            fw.write(str(wrds[k + 1][1]) + '\n')
+            if wrds[k][0] != "sp":
+                fw.write('"' + pinyins[idx_pinyin] + '"' + '\n')
+                idx_pinyin += 1
+            else:
+                fw.write('"' + wrds[k][0] + '"' + '\n')
+
+        fw.write(str(wrds[-1][1]) + '\n')
+        fw.write(str(phons[-1][2]) + '\n')
+        if wrds[-1][0] != "sp":
+            fw.write('"' + pinyins[idx_pinyin] + '"' + '\n')
+        else:
+            fw.write('"' + wrds[-1][0] + '"' + '\n')
 
     fw.close()
 
@@ -275,7 +348,7 @@ def prep_mlf_in_mem(txt, dict, puncs, base):
 if __name__ == '__main__':
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "r:a:d:p:")
+        opts, args = getopt.getopt(sys.argv[1:], "r:a:d:p:y:")
 
         # get the three mandatory arguments
         wavfile, trsfile, outfile = args
@@ -284,6 +357,7 @@ if __name__ == '__main__':
         dict_add = getopt2("-a", opts)
         dict_alone = getopt2("-d", opts)
         puncs = getopt2("-p", opts)
+        include_pinyin = getopt2("-y", opts, default=True)
 
     except:
         print __doc__
@@ -358,7 +432,7 @@ if __name__ == '__main__':
         word_alignments += r
         i += 1
 
-    writeTextGrid(outfile, word_alignments)
+    writeTextGrid(outfile, word_alignments, include_pinyin, tmpbase)
 
     #clean up
     os.system('rm -f ' + tmpbase + '*')
