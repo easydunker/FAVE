@@ -297,13 +297,13 @@ def prep_wav(orig_wav, out_wav, sr_override, wave_start, wave_end):
     return SR
 
 def processOneSegment(lines, tmpbase, lineNumber, SR, dict, puncs):
-    if len(lines[lineNumber].split('\t')) != 3:
+    if len(lines[lineNumber].split("\t")) != 3:
         print "Bad transcription line: " + lines[lineNumber]
         return
-
-    wavestart = lines[lineNumber].split()[0]
-    waveend = lines[lineNumber].split()[1]
-    line = lines[lineNumber].split()[2]
+    wavestart = lines[lineNumber].split("\t")[0]
+    waveend = lines[lineNumber].split("\t")[1]
+    line = lines[lineNumber].split("\t")[2]
+    print "processing: " + line
     spacedLine = line.replace('', ' ')
     base = tmpbase + '-' + str(lineNumber)
     prep_wav(tmpbase + '.wav', base + '.wav', SR, wavestart, waveend)
