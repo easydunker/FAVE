@@ -310,7 +310,7 @@ def processOneSegment(lines, tmpbase, lineNumber, SR, dict, puncs, pinyin):
 
     base = tmpbase + '-' + str(lineNumber)
     if include_pinyin is True:
-        pinyinf = codecs.open(base + "-pinyin.txt", 'w', 'utf-8rm ')
+        pinyinf = codecs.open(base + "-pinyin.txt", 'w', 'utf-8')
         print line
         pinyinf.write("" + line)
         pinyinf.close()
@@ -319,6 +319,7 @@ def processOneSegment(lines, tmpbase, lineNumber, SR, dict, puncs, pinyin):
         if ok != 0:
             print "Ignoring line as adso generates bad character with line: " + lines[lineNumber]
             return
+    os.system("rm -f " + base + "-pinyin.txt")
     spacedLine = line.replace('', ' ')
     prep_wav(tmpbase + '.wav', base + '.wav', SR, wavestart, waveend)
 
