@@ -74,6 +74,8 @@ def gen_res(infile1, infile2, outfile):
     f = codecs.open(infile1, 'r', 'utf-8')
     lines = f.readlines()
     f.close()
+    if len(lines) < 2:
+        return False
     
     f = codecs.open(infile2, 'r', 'utf-8')
     lines2 = f.readlines()
@@ -93,6 +95,7 @@ def gen_res(infile1, infile2, outfile):
         else:
             fw.write(line.split()[0] + ' ' + line.split()[1] + ' ' + line.split()[2] + ' ' + line.split()[3] + ' ' + words.pop() + '\n')
     fw.write(lines[-1])
+    return True
 
 def getopt2(name, opts, default = None) :
         value = [v for n,v in opts if n==name]
@@ -334,8 +337,12 @@ def processOneSegment(lines, tmpbase, lineNumber, SR, dict, puncs, pinyin):
               MODEL_DIR + '/' + str(SR) + '/macros -H ' + MODEL_DIR + '/' + str(SR) + '/hmmdefs -i ' + base + '.aligned' + ' ' +
               tmpbase + '.dict ' + MODEL_DIR + '/monophones ' + base + '.plp' + ' > ' + base + '.results')
 
-    gen_res(base + '.aligned', base + '.mlf', base + '.results.mlf')
-    return readAlignedMLF(base + '.results.mlf', SR, float(wavestart))
+    success = gen_res(base + '.aligned', base + '.mlf', base + '.results.mlf')
+    if success:
+        return readAlignedMLF(base + '.results.mlf', SR, float(wavestart))
+    else:
+        print "Aligning failed for " + lines[lineNumber]
+        return
 
 def prep_mlf_in_mem(txt, dict, puncs, base):
 
