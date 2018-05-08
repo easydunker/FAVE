@@ -141,7 +141,11 @@ def readAlignedMLF(mlffile, SR, wave_start):
     return ret
 
 
-def writeTextGrid(outfile, word_alignments, pinyin, tmpbase):
+def writeTextGrid(outfile, word_alignments, pinyin, tmpbase, pinyins):
+    include_pinyin = False
+    if pinyin:
+        include_pinyin = bool(pinyin)
+
     # make the list of just phone alignments
     phons = []
     for wrd in word_alignments:
@@ -151,31 +155,33 @@ def writeTextGrid(outfile, word_alignments, pinyin, tmpbase):
     # we're getting elements of the form:
     #   ["word label", ["phone1", start, end], ["phone2", start, end], ...]
     wrds = []
-    pinyinwrds = ""
+    # pinyinwrds = ""
+    # pinyinwrds_cnt = 0
+    idx_pinyin = 0
     for wrd in word_alignments:
         # If no phones make up this word, then it was an optional word
         # like a pause that wasn't actually realized.
         if len(wrd) == 1:
             continue
-        wrds.append([wrd[0], wrd[1][1], wrd[-1][2]])  # word label, first phone start time, last phone end time
-        if wrd[0] != "sp":
-            pinyinwrds += wrd[0]
+        if include_pinyin and wrd[0] != "sp":
+            if idx_pinyin >= len(pinyins):
+                print "Pinyin and alignment does not match"
+                return
+            wrds.append([wrd[0], wrd[1][1], wrd[-1][2], pinyins[idx_pinyin]])
+            idx_pinyin += 1
+        else:
+            wrds.append([wrd[0], wrd[1][1], wrd[-1][2]])  # word label, first phone start time, last phone end time
 
-    include_pinyin = False
-    if pinyin:
-        include_pinyin = bool(pinyin)
-
-    if include_pinyin is True:
-        pinyinf = open(tmpbase + "-pinyin.txt", 'w')
-        pinyinf.write(pinyinwrds)
-        pinyinf.close()
-        cmd = "adso -y -f " + tmpbase + "-pinyin.txt" + "|sed 's/[1-9]/& /g' >" + tmpbase + "-pinyin.out"
-        os.system(cmd)
-        f = open(tmpbase + "-pinyin.out")
-        output = f.readline()
-        f.close()
-        pinyins = output.split()
-
+    # if include_pinyin is True:
+        # pinyinf = open(tmpbase + "-pinyin.txt", 'w')
+        # pinyinf.write(pinyinwrds)
+        # pinyinf.close()
+        # cmd = "adso -y -f " + tmpbase + "-pinyin.txt" + "|sed 's/[1-9]/& /g' >" + tmpbase + "-pinyin.out"
+        # os.system(cmd)
+        # f = open(tmpbase + "-pinyin.out")
+        # output = f.readline()
+        # f.close()
+        # pinyins = output.split()
 
     # write the phone interval tier
     fw = open(outfile, 'w')
@@ -206,20 +212,18 @@ def writeTextGrid(outfile, word_alignments, pinyin, tmpbase):
         fw.write(str(phons[0][1]) + '\n')
         fw.write(str(phons[-1][-1]) + '\n')
         fw.write(str(len(wrds)) + '\n')
-        idx_pinyin = 0
         for k in range(len(wrds) - 1):
             fw.write(str(wrds[k][1]) + '\n')
             fw.write(str(wrds[k + 1][1]) + '\n')
             if wrds[k][0] != "sp":
-                fw.write('"' + pinyins[idx_pinyin] + '"' + '\n')
-                idx_pinyin += 1
+                fw.write('"' + wrds[k][-1] + '"' + '\n')
             else:
                 fw.write('"' + wrds[k][0] + '"' + '\n')
 
         fw.write(str(wrds[-1][1]) + '\n')
         fw.write(str(phons[-1][2]) + '\n')
         if wrds[-1][0] != "sp":
-            fw.write('"' + pinyins[idx_pinyin] + '"' + '\n')
+            fw.write('"' + wrds[-1][-1] + '"' + '\n')
         else:
             fw.write('"' + wrds[-1][0] + '"' + '\n')
 
@@ -237,30 +241,6 @@ def writeTextGrid(outfile, word_alignments, pinyin, tmpbase):
     fw.write(str(wrds[-1][1]) + '\n')
     fw.write(str(phons[-1][2]) + '\n')
     fw.write('"' + wrds[-1][0] + '"' + '\n')
-
-    if include_pinyin is True:
-        # write the pinyin interval tier
-        fw.write('"IntervalTier"\n')
-        fw.write('"pinyin"\n')
-        fw.write(str(phons[0][1]) + '\n')
-        fw.write(str(phons[-1][-1]) + '\n')
-        fw.write(str(len(wrds)) + '\n')
-        idx_pinyin = 0
-        for k in range(len(wrds) - 1):
-            fw.write(str(wrds[k][1]) + '\n')
-            fw.write(str(wrds[k + 1][1]) + '\n')
-            if wrds[k][0] != "sp":
-                fw.write('"' + pinyins[idx_pinyin] + '"' + '\n')
-                idx_pinyin += 1
-            else:
-                fw.write('"' + wrds[k][0] + '"' + '\n')
-
-        fw.write(str(wrds[-1][1]) + '\n')
-        fw.write(str(phons[-1][2]) + '\n')
-        if wrds[-1][0] != "sp":
-            fw.write('"' + pinyins[idx_pinyin] + '"' + '\n')
-        else:
-            fw.write('"' + wrds[-1][0] + '"' + '\n')
 
     fw.close()
 
@@ -312,18 +292,8 @@ def processOneSegment(lines, tmpbase, lineNumber, SR, dict, puncs, pinyin):
         include_pinyin = bool(pinyin)
 
     base = tmpbase + '-' + str(lineNumber)
-    if include_pinyin is True:
-        pinyinf = codecs.open(base + "-pinyin.txt", 'w', 'utf-8')
-        print line
-        pinyinf.write("" + line)
-        pinyinf.close()
-        cmd = "adso -y -f " + base + "-pinyin.txt" + "|sed 's/[1-9]/& /g'"
-        ok = os.system(cmd)
-        if ok != 0:
-            print "Ignoring line as adso generates bad character with line: " + lines[lineNumber]
-            return
-    os.system("rm -f " + base + "-pinyin.txt")
     spacedLine = line.replace('', ' ')
+
     prep_wav(tmpbase + '.wav', base + '.wav', SR, wavestart, waveend)
 
     # prepare plpfile
@@ -339,10 +309,37 @@ def processOneSegment(lines, tmpbase, lineNumber, SR, dict, puncs, pinyin):
 
     success = gen_res(base + '.aligned', base + '.mlf', base + '.results.mlf')
     if success:
-        return readAlignedMLF(base + '.results.mlf', SR, float(wavestart))
+        word_alignments = readAlignedMLF(base + '.results.mlf', SR, float(wavestart))
+        wrds = ""
+        wrd_cnt = 0
+        for wrd in word_alignments:
+            if wrd[0] != "sp":
+                wrds += wrd[0]
+                wrd_cnt += 1
+        if include_pinyin is True:
+            pinyinf = open(base + "-pinyin.txt", 'w')
+            print wrds
+            pinyinf.write(wrds)
+            pinyinf.close()
+            cmd = "adso -y -f " + base + "-pinyin.txt" + "|sed 's/[1-9]/& /g' >" + base + "-pinyin.out"
+            ok = os.system(cmd)
+            os.system("rm -f " + base + "-pinyin.txt")
+            if ok != 0:
+                print "Ignoring line as adso generates bad character with line: " + lines[lineNumber]
+                return None, None
+
+            tmpf = open(base + "-pinyin.out")
+            pinyin = tmpf.readline().split()
+            os.system("rm -f " + base + "-pinyin.out")
+            if len(pinyin) != wrd_cnt:
+                print "Ignoring line as pinyin length does not match with Hanzi length: " + lines[lineNumber]
+                return None, None
+            return word_alignments, pinyin
+        else:
+            return word_alignments, None
     else:
         print "Aligning failed for " + lines[lineNumber]
-        return
+        return None, None
 
 def prep_mlf_in_mem(txt, dict, puncs, base):
 
@@ -448,14 +445,17 @@ if __name__ == '__main__':
     f.close()
 
     word_alignments = []
+    pinyins = []
     i = 0
     while (i < len(lines)):
-        r = processOneSegment(lines, tmpbase, i, SR, dict, puncs, include_pinyin)
+        r, pinyin = processOneSegment(lines, tmpbase, i, SR, dict, puncs, include_pinyin)
         if r is not None:
             word_alignments += r
+        if pinyin is not None:
+            pinyins.extend(pinyin)
         i += 1
 
-    writeTextGrid(outfile, word_alignments, include_pinyin, tmpbase)
+    writeTextGrid(outfile, word_alignments, include_pinyin, tmpbase, pinyins)
 
     #clean up
     os.system('rm -f ' + tmpbase + '*')
